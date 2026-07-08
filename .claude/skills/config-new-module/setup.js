@@ -8,12 +8,13 @@
  * "modules" de um monorepo Turborepo (apps/frontend + apps/backend), a partir
  * dos templates estáticos em ./assets.
  *
- * Uso (execute a partir da raiz do monorepo, ex: dentro de "projeto-capsule"):
+ * Uso (execute a partir da raiz do monorepo, que é a própria raiz do
+ * repositório — a config-project-fullstack não cria subpasta):
  *   node setup.js <nome-do-modulo> <namespace>
  *
  * <nome-do-modulo>  obrigatório. kebab-case, ex: "auth", "user-profile".
  * <namespace>       obrigatório. Escopo npm dos pacotes do monorepo,
- *                   ex: "@projeto-capsule" (o "@" é opcional no argumento).
+ *                   ex: "@minha-empresa" (o "@" é opcional no argumento).
  */
 
 const fs = require('fs');
@@ -83,7 +84,7 @@ function parseArgs() {
   if (!rawNamespace) {
     throw new Error(
       'Namespace não informado. Esta skill não pode ser executada sem um namespace ' +
-        '(ex: "@projeto-capsule"). Uso: node setup.js <nome-do-modulo> <namespace>'
+        '(ex: "@minha-empresa"). Uso: node setup.js <nome-do-modulo> <namespace>'
     );
   }
   const namespace = normalizeNamespace(rawNamespace);
@@ -96,7 +97,7 @@ function normalizeNamespace(raw) {
   if (!/^@[a-z0-9][a-z0-9._-]*$/.test(withAt)) {
     throw new Error(
       `Namespace inválido: "${raw}". Use apenas o formato de escopo npm, ` +
-        'ex: "@projeto-capsule" (letras minúsculas, números, "-", "_" ou ".").'
+        'ex: "@minha-empresa" (letras minúsculas, números, "-", "_" ou ".").'
     );
   }
   return withAt;

@@ -7,6 +7,11 @@
  * Script determinístico que recria, do absoluto zero, a estrutura de projeto
  * fullstack (Turborepo + Next.js + NestJS) descrita no runbook da skill.
  *
+ * O projeto é criado DIRETAMENTE na raiz do repositório atual (sem subpasta):
+ * a skill é pensada para ser reaproveitada em qualquer repositório git, e o
+ * nome do projeto (campo "name" do package.json raiz) é sempre o nome da
+ * pasta/repositório atual — não um nome fixo.
+ *
  * Uso:
  *   node setup.js [namespace]
  *
@@ -20,16 +25,21 @@ const path = require('path');
 const { execSync } = require('child_process');
 
 const ROOT = process.cwd();
-const TURBOREPO_DIR_NAME = 'projeto-capsule';
-const TURBOREPO_DIR = path.join(ROOT, TURBOREPO_DIR_NAME);
-const APPS_DIR = path.join(TURBOREPO_DIR, 'apps');
+const PROJECT_NAME = path.basename(ROOT);
+const SCAFFOLD_TMP_DIR_NAME = '.turbo-scaffold-tmp';
+const SCAFFOLD_TMP_DIR = path.join(ROOT, SCAFFOLD_TMP_DIR_NAME);
+const APPS_DIR = path.join(ROOT, 'apps');
 const FRONTEND_DIR = path.join(APPS_DIR, 'frontend');
 const BACKEND_DIR = path.join(APPS_DIR, 'backend');
 
-const IGNORED_DIRS = new Set(['node_modules', '.git', '.turbo', '.next', 'dist']);
+// Itens que nunca fazem parte da estrutura gerada por esta skill e que,
+// portanto, nunca devem ser varridos/movidos/reescritos por ela (o próprio
+// repositório git, a pasta de skills do Claude Code, etc.).
+const NEVER_TOUCH = new Set(['.git', '.claude']);
+const IGNORED_DIRS = new Set(['node_modules', '.git', '.claude', '.turbo', '.next', 'dist']);
 
 let currentStep = 0;
-const TOTAL_STEPS = 13;
+const TOTAL_STEPS = 15;
 
 function log(msg) {
   console.log(msg);
@@ -83,11 +93,20 @@ function ensureGitRepository() {
 }
 
 function ensureFromScratch() {
-  if (fs.existsSync(TURBOREPO_DIR)) {
+  const conflicting = ['package.json', 'apps', 'packages', 'modules', 'turbo.json'].filter(
+    (entry) => fs.existsSync(path.join(ROOT, entry))
+  );
+  if (conflicting.length) {
     throw new Error(
-      `A pasta "${TURBOREPO_DIR_NAME}" já existe em ${ROOT}. ` +
-        'Para garantir que o projeto seja criado do absoluto zero, remova ou renomeie ' +
-        'essa pasta antes de rodar a skill novamente.'
+      `A raiz do repositório (${ROOT}) já parece ter um projeto (encontrado: ` +
+        `${conflicting.join(', ')}). Para garantir que o projeto seja criado do absoluto ` +
+        'zero, remova esses itens antes de rodar a skill novamente.'
+    );
+  }
+  if (fs.existsSync(SCAFFOLD_TMP_DIR)) {
+    throw new Error(
+      `A pasta temporária "${SCAFFOLD_TMP_DIR_NAME}" já existe em ${ROOT}. Remova-a antes ` +
+        'de rodar a skill novamente.'
     );
   }
 }
@@ -106,10 +125,58 @@ function ensureToolingAvailable() {
 // ---------------------------------------------------------------------------
 
 function createTurborepo() {
-  run(`npx --yes create-turbo@latest ${TURBOREPO_DIR_NAME} -m npm --no-git`, ROOT);
-  if (!fs.existsSync(APPS_DIR)) {
+  // create-turbo (como a maioria das ferramentas de scaffold) se recusa a
+  // rodar num diretório não vazio — e a raiz do repositório já tem pelo
+  // menos ".git" (e normalmente ".claude"). Por isso o scaffold roda numa
+  // subpasta temporária oculta, e o resultado é movido para a raiz logo em
+  // seguida (flattenScaffoldIntoRoot).
+  run(`npx --yes create-turbo@latest ${SCAFFOLD_TMP_DIR_NAME} -m npm --no-git`, ROOT);
+  if (!fs.existsSync(path.join(SCAFFOLD_TMP_DIR, 'apps'))) {
     throw new Error('create-turbo não gerou a pasta "apps" esperada.');
   }
+  flattenScaffoldIntoRoot();
+}
+
+function sleepSync(ms) {
+  const view = new Int32Array(new SharedArrayBuffer(4));
+  Atomics.wait(view, 0, 0, ms);
+}
+
+// No Windows, mover (rename) uma pasta recém-instalada pelo npm (ex.: "apps",
+// que contém node_modules) pode falhar com EPERM/EBUSY por um lock
+// transitório (antivírus/indexador de arquivos escaneando os arquivos
+// recém-criados). Tenta de novo algumas vezes antes de recorrer a
+// copiar-e-remover, mais lento mas resiliente a esse tipo de lock.
+function moveWithRetry(src, dest, attempts = 6, delayMs = 500) {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      fs.renameSync(src, dest);
+      return;
+    } catch (err) {
+      const retryable = err.code === 'EPERM' || err.code === 'EBUSY';
+      if (!retryable || attempt === attempts) {
+        if (retryable) {
+          fs.cpSync(src, dest, { recursive: true });
+          fs.rmSync(src, { recursive: true, force: true });
+          return;
+        }
+        throw err;
+      }
+      sleepSync(delayMs);
+    }
+  }
+}
+
+function flattenScaffoldIntoRoot() {
+  for (const entry of fs.readdirSync(SCAFFOLD_TMP_DIR)) {
+    const src = path.join(SCAFFOLD_TMP_DIR, entry);
+    const dest = path.join(ROOT, entry);
+    if (fs.existsSync(dest)) {
+      throw new Error(`Não é possível mover "${entry}" para a raiz: já existe ${dest}.`);
+    }
+    moveWithRetry(src, dest);
+  }
+  fs.rmSync(SCAFFOLD_TMP_DIR, { recursive: true, force: true });
 }
 
 function cleanApps() {
@@ -222,12 +289,83 @@ function createEnvFiles() {
 }
 
 // ---------------------------------------------------------------------------
+// Nome do projeto e README (a raiz do projeto é a raiz do repositório)
+// ---------------------------------------------------------------------------
+
+function patchRootPackageName() {
+  const pkgPath = path.join(ROOT, 'package.json');
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+  pkg.name = PROJECT_NAME;
+  fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
+}
+
+function createReadme(namespace) {
+  const scopeNote = namespace
+    ? `Os pacotes internos usam o escopo \`${namespace}\` (ex.: \`${namespace}/auth\`).`
+    : 'Os pacotes internos ainda não têm um escopo npm definido (nenhum namespace foi informado ao rodar esta skill).';
+
+  const content = `# ${PROJECT_NAME}
+
+Monorepo fullstack gerado com [Turborepo](https://turborepo.dev), [Next.js](https://nextjs.org)
+e [NestJS](https://nestjs.com).
+
+## Tecnologias
+
+- **Monorepo**: Turborepo + npm workspaces
+- **Frontend**: Next.js (App Router), TypeScript, Tailwind CSS — porta \`3000\`
+- **Backend**: NestJS, \`@nestjs/config\`, CORS habilitado — porta \`4000\`
+- **Módulos de negócio**: pacotes compartilhados em \`modules/*\`, testados com Jest
+  (ver skills \`config-new-module\`, \`config-module-backend\` e \`config-module-frontend\`
+  em \`.claude/skills/\`)
+
+## Estrutura
+
+\`\`\`
+apps/
+  frontend/   # Next.js — http://localhost:3000
+  backend/    # NestJS  — http://localhost:4000
+packages/     # configs compartilhadas (eslint, tsconfig, ui)
+modules/      # módulos de negócio compartilhados entre frontend e backend
+\`\`\`
+
+${scopeNote}
+
+## Comandos básicos
+
+Rodar a partir da raiz do repositório:
+
+| Comando | Descrição |
+| --- | --- |
+| \`npm install\` | Instala as dependências de todos os workspaces |
+| \`npm run dev\` | Sobe frontend (3000) e backend (4000) em modo desenvolvimento |
+| \`npm run build\` | Builda todos os apps/pacotes/módulos |
+| \`npm run lint\` | Roda o lint em todos os workspaces |
+| \`npm run check-types\` | Checa os tipos TypeScript de todos os workspaces |
+| \`npm run test --workspace=<pacote>\` | Roda os testes de um workspace específico |
+
+## Variáveis de ambiente
+
+- \`apps/frontend/.env\`: \`NEXT_PUBLIC_API_URL=http://localhost:4000\`
+- \`apps/backend/.env\`: \`PORT=4000\`
+`;
+
+  fs.writeFileSync(path.join(ROOT, 'README.md'), content);
+}
+
+// ---------------------------------------------------------------------------
 // Sweep de segurança: remove qualquer .git aninhado criado por alguma
-// ferramenta de scaffold, já que o projeto deve viver no repositório existente.
+// ferramenta de scaffold, já que o projeto vive na raiz do repositório
+// existente. NUNCA varre ".git"/".claude" da própria raiz (NEVER_TOUCH).
 // ---------------------------------------------------------------------------
 
 function removeNestedGitDirs() {
-  const stack = [TURBOREPO_DIR];
+  const stack = [];
+  for (const entry of fs.readdirSync(ROOT, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    if (NEVER_TOUCH.has(entry.name) || entry.name === 'node_modules') continue;
+    stack.push(path.join(ROOT, entry.name));
+  }
+
   while (stack.length) {
     const dir = stack.pop();
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -283,7 +421,9 @@ function applyNamespace(rawNamespace) {
   }
 
   const namespace = normalizeNamespace(rawNamespace);
-  const pkgPaths = findPackageJsonFiles(TURBOREPO_DIR);
+  const pkgPaths = findPackageJsonFiles(ROOT).filter(
+    (pkgPath) => path.dirname(pkgPath) !== ROOT // não reescreve o package.json raiz (já tem PROJECT_NAME)
+  );
 
   const packages = pkgPaths.map((pkgPath) => ({
     pkgPath,
@@ -328,7 +468,11 @@ function finalVerification() {
     [fs.existsSync(path.join(BACKEND_DIR, 'package.json')), 'package.json do backend ausente'],
     [fs.existsSync(path.join(FRONTEND_DIR, '.env')), '.env do frontend ausente'],
     [fs.existsSync(path.join(BACKEND_DIR, '.env')), '.env do backend ausente'],
+    [fs.existsSync(path.join(ROOT, 'README.md')), 'README.md da raiz ausente'],
   ];
+
+  const rootPkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  checks.push([rootPkg.name === PROJECT_NAME, 'nome do package.json raiz não é o nome da pasta/repositório']);
 
   const mainTs = fs.readFileSync(path.join(BACKEND_DIR, 'src', 'main.ts'), 'utf8');
   checks.push([mainTs.includes('4000'), 'backend não está configurado para a porta 4000']);
@@ -339,6 +483,7 @@ function finalVerification() {
     throw new Error(`Verificação final falhou: ${failures.join('; ')}`);
   }
 
+  log(`    Projeto: ${PROJECT_NAME}`);
   log('    Frontend (Next.js): npm run dev -> http://localhost:3000');
   log('    Backend  (NestJS) : npm run dev -> http://localhost:4000');
 }
@@ -356,7 +501,7 @@ function main() {
     ensureFromScratch();
   });
 
-  step(`Criando monorepo Turborepo ("${TURBOREPO_DIR_NAME}")`, createTurborepo);
+  step(`Criando monorepo Turborepo na raiz do repositório ("${PROJECT_NAME}")`, createTurborepo);
   step('Limpando apps/* geradas pelo template padrão', cleanApps);
   step('Criando app frontend (Next.js)', createFrontend);
   step('Criando app backend (NestJS) + @nestjs/config', createBackend);
@@ -365,11 +510,13 @@ function main() {
   step('Adicionando script "dev" ao package.json do backend', patchBackendPackageJson);
   step('Removendo "deleteOutDir" de nest-cli.json (evita bug de cache incremental)', patchNestCliJson);
   step('Criando arquivos .env.example e .env', createEnvFiles);
+  step(`Definindo nome do projeto ("${PROJECT_NAME}") no package.json raiz`, patchRootPackageName);
   step('Removendo repositórios git aninhados indevidos', removeNestedGitDirs);
   step('Aplicando namespace informado (se houver)', () => applyNamespace(namespace));
+  step('Criando README.md com tecnologias e comandos básicos', () => createReadme(namespace));
   step('Verificação final da configuração', finalVerification);
 
-  log('\n✔ Projeto configurado com sucesso em: ' + TURBOREPO_DIR);
+  log(`\n✔ Projeto "${PROJECT_NAME}" configurado com sucesso em: ${ROOT}`);
 }
 
 main();

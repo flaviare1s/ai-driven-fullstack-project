@@ -1,14 +1,20 @@
 ---
 name: config-project-fullstack
-description: Cria do absoluto zero um monorepo Turborepo fullstack (Next.js na porta 3000 + NestJS na porta 4000, com @nestjs/config, CORS habilitado e arquivos .env) seguindo uma sequência fixa e determinística de comandos. Use quando o usuário pedir para configurar/inicializar/criar um novo projeto fullstack com essa stack (Turborepo + Next.js + NestJS), ou para reproduzir o processo de setup descrito neste projeto. Aceita opcionalmente um namespace/escopo npm (ex. "@minha-empresa") para renomear todos os pacotes gerados ao final.
+description: Cria do absoluto zero, DIRETAMENTE na raiz do repositório atual (sem subpasta), um monorepo Turborepo fullstack (Next.js na porta 3000 + NestJS na porta 4000, com @nestjs/config, CORS habilitado, arquivos .env e README.md com tecnologias/comandos) seguindo uma sequência fixa e determinística de comandos. O nome do projeto (package.json raiz) é sempre o nome da pasta/repositório atual. Use quando o usuário pedir para configurar/inicializar/criar um novo projeto fullstack com essa stack (Turborepo + Next.js + NestJS). Aceita opcionalmente um namespace/escopo npm (ex. "@minha-empresa") para renomear todos os pacotes gerados ao final.
 ---
 
 # config-project-fullstack
 
-Esta skill reproduz, de forma **determinística**, o passo a passo de configuração
-usado para criar este projeto do zero (Turborepo + Next.js + NestJS). Toda a
-lógica fica em `setup.js`, no mesmo diretório desta skill — não improvise os
-comandos manualmente nem os substitua por variações.
+Esta skill reproduz, de forma **determinística**, o passo a passo de
+configuração de um projeto fullstack do zero (Turborepo + Next.js + NestJS).
+Toda a lógica fica em `setup.js`, no mesmo diretório desta skill — não
+improvise os comandos manualmente nem os substitua por variações.
+
+Esta skill é feita para ser **reaproveitada em qualquer repositório**: o
+projeto é criado diretamente na raiz do repositório atual (não numa
+subpasta com nome fixo), e o nome do projeto (campo `"name"` do
+`package.json` raiz) é sempre derivado do nome da pasta/repositório onde a
+skill é executada.
 
 ## Como executar
 
@@ -28,7 +34,8 @@ node .claude/skills/config-project-fullstack/setup.js @minha-empresa
 ```
 
 (o "@" é opcional no argumento — a skill normaliza e valida o formato de
-escopo npm).
+escopo npm). Isso não afeta o nome do projeto em si (`package.json` raiz),
+que continua sendo sempre o nome da pasta/repositório.
 
 ## Regras para quem invoca esta skill
 
@@ -38,19 +45,29 @@ escopo npm).
   não edite o script "on the fly" para pular etapas.
 - Se o script falhar em qualquer etapa, pare e reporte o erro exato ao
   usuário — não tente contornar manualmente (ex.: não rode `git init`, não
-  sobrescreva a pasta gerada, não reinstale pacotes globais por conta própria).
+  sobrescreva arquivos gerados à mão, não reinstale pacotes globais por
+  conta própria).
 - Se o usuário fornecer um namespace, repasse-o exatamente como o primeiro
   argumento do script.
+- **Nunca** rode esta skill num repositório que já tenha `package.json`,
+  `apps/`, `packages/` ou `modules/` na raiz — ela vai abortar de propósito
+  para não sobrescrever um projeto existente.
 
 ## O que o script faz (em ordem)
 
 1. **Pré-condições de segurança**: confere que `node`, `npm`, `npx` e `git`
    existem, que o diretório atual já é um repositório git (por isso a skill
-   nunca inicializa um novo) e que a pasta `projeto-capsule` ainda não existe
-   (garante criação do absoluto zero — se já existir, o script aborta em vez
-   de sobrescrever).
-2. `npx create-turbo@latest projeto-capsule -m npm --no-git` — cria o monorepo
-   sem inicializar um novo repositório git aninhado.
+   nunca inicializa um novo), e que a raiz do repositório ainda não tem
+   `package.json`/`apps`/`packages`/`modules`/`turbo.json` (garante criação
+   do absoluto zero — se algum já existir, o script aborta em vez de
+   sobrescrever).
+2. `npx create-turbo@latest .turbo-scaffold-tmp -m npm --no-git` — o
+   create-turbo se recusa a rodar num diretório não vazio (a raiz do
+   repositório já tem `.git`/`.claude`), então o scaffold roda numa subpasta
+   oculta temporária, e todo o conteúdo gerado é movido para a raiz do
+   repositório logo em seguida (a subpasta temporária é removida ao final
+   desse passo). O `.git`/`.claude` da raiz nunca são tocados por esse
+   processo.
 3. Remove tudo dentro de `apps/*` (equivalente a `rm -rf apps/*`).
 4. `npx create-next-app@latest frontend --yes --src-dir ...` dentro de
    `apps/`, com todas as flags fixadas explicitamente (TypeScript, Tailwind,
@@ -76,22 +93,34 @@ escopo npm).
 10. Cria `apps/frontend/.env.example` (`NEXT_PUBLIC_API_URL=http://localhost:4000`)
     e `apps/backend/.env.example` (`PORT=4000`), copiando cada um para o
     respectivo `.env`.
-11. Varre o projeto criado em busca de pastas `.git` aninhadas inesperadas
+11. Define o campo `"name"` do `package.json` raiz como o nome da
+    pasta/repositório atual (ex.: `ai-driven-fullstack-project`).
+12. Varre o projeto criado em busca de pastas `.git` aninhadas inesperadas
     (criadas por alguma ferramenta apesar das flags) e remove qualquer uma
-    que seja encontrada.
-12. **Se um namespace foi informado**: localiza todos os `package.json` do
-    monorepo (ignorando `node_modules`), reescreve o campo `name` de cada um
-    para usar o novo escopo (preservando o identificador do pacote) e
-    atualiza as referências cruzadas em `dependencies`/`devDependencies`/
-    `peerDependencies`/`optionalDependencies` para os novos nomes, mantendo o
-    monorepo consistente.
-13. Verificação final: confirma que os `package.json`/`.env` esperados
-    existem e que `main.ts` está configurado para a porta 4000 com CORS.
+    que seja encontrada — **nunca** varre nem toca em `.git`/`.claude` da
+    própria raiz do repositório.
+13. **Se um namespace foi informado**: localiza todos os `package.json` do
+    monorepo (ignorando `node_modules`, `.git` e `.claude`; e ignorando
+    também o próprio `package.json` raiz, cujo nome já foi definido no passo
+    11), reescreve o campo `name` de cada um para usar o novo escopo
+    (preservando o identificador do pacote) e atualiza as referências
+    cruzadas em `dependencies`/`devDependencies`/`peerDependencies`/
+    `optionalDependencies` para os novos nomes, mantendo o monorepo
+    consistente.
+14. Cria `README.md` na raiz do repositório, com as tecnologias usadas
+    (Turborepo, Next.js, NestJS, TypeScript), a estrutura de pastas
+    (`apps/`, `packages/`, `modules/`), os comandos básicos (`npm install`,
+    `npm run dev`/`build`/`lint`/`check-types`) e as variáveis de ambiente.
+15. Verificação final: confirma que os `package.json`/`.env`/`README.md`
+    esperados existem, que o nome do projeto é o da pasta/repositório, e que
+    `main.ts` está configurado para a porta 4000 com CORS.
 
 ## Resultado esperado
 
-- `projeto-capsule/apps/frontend`: Next.js, `npm run dev` sobe em
-  `http://localhost:3000`.
-- `projeto-capsule/apps/backend`: NestJS, `npm run dev` sobe em
-  `http://localhost:4000`, lendo variáveis de ambiente via `@nestjs/config`
-  (arquivo `.env` com `PORT=4000`) e com CORS habilitado.
+- Projeto criado na **raiz do repositório** (não numa subpasta), com
+  `package.json` raiz nomeado como a pasta/repositório atual.
+- `apps/frontend`: Next.js, `npm run dev` sobe em `http://localhost:3000`.
+- `apps/backend`: NestJS, `npm run dev` sobe em `http://localhost:4000`,
+  lendo variáveis de ambiente via `@nestjs/config` (arquivo `.env` com
+  `PORT=4000`) e com CORS habilitado.
+- `README.md` na raiz, documentando tecnologias e comandos básicos.
