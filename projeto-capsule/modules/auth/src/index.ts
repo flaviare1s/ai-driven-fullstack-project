@@ -1,3 +1,2 @@
-export function ping(): string {
-  return 'pong';
-}
+export * from './auth.module';
+export * from './auth.service';
