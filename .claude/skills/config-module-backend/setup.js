@@ -349,13 +349,23 @@ function clearBackendIncrementalCache() {
   }
 }
 
+// O nome do workspace do backend não é necessariamente "backend": a
+// config-project-fullstack pode aplicar um namespace/escopo npm e renomear o
+// pacote para "<namespace>/backend". Resolvemos o nome real a partir do
+// package.json do backend para que "npm run <script> --workspace=<nome>" funcione
+// tanto com quanto sem namespace.
+function backendWorkspaceName() {
+  const pkg = readJson(BACKEND_PKG);
+  return pkg.name || 'backend';
+}
+
 function buildBackend() {
   clearBackendIncrementalCache();
-  run('npm run build --workspace=backend', ROOT);
+  run(`npm run build --workspace=${backendWorkspaceName()}`, ROOT);
 }
 
 function testBackend() {
-  run('npm run test --workspace=backend', ROOT);
+  run(`npm run test --workspace=${backendWorkspaceName()}`, ROOT);
 }
 
 // ---------------------------------------------------------------------------

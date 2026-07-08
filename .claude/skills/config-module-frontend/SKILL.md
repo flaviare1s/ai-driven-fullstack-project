@@ -72,11 +72,13 @@ node .claude/skills/config-module-frontend/setup.js auth public
    (renderiza o componente com Testing Library e confere o título).
 4. Remove o stub genérico `test/index.test.ts` criado pela
    `config-new-module`, se ainda existir.
-5. Garante (merge idempotente, sem sobrescrever o arquivo inteiro — outra
-   skill como a `config-module-backend` pode já ter escrito outros exports
-   nele) o export do componente de página em
-   `modules/<nome-do-modulo>/src/index.ts`, removendo o `ping` genérico se
-   ainda estiver lá.
+5. Garante que o barrel raiz `modules/<nome-do-modulo>/src/index.ts` fique
+   **livre da página** (e do `ping` genérico): o barrel é o entrypoint `"."`
+   do pacote, consumido pelo **backend** (`import { <Nome>Module } from
+   '<pacote>'`). A página React é exposta por um **subpath dedicado**
+   (`<pacote>/page`), nunca reexportada no barrel — ver passo 8 e a seção
+   "Por que a página sai por um subpath". O merge é idempotente e não mexe nos
+   exports de backend que a `config-module-backend` tenha escrito.
 6. Sobrescreve `jest.config.ts` do módulo para rodar specs `.spec.ts` e
    `.spec.tsx` colocalizados em `src/` (mesmo arquivo final que a
    `config-module-backend` também escreve — as duas skills convergem para o
@@ -90,6 +92,10 @@ node .claude/skills/config-module-frontend/setup.js auth public
      `tsc` do módulo já compila `.tsx` para JS puro (usando o runtime
      automático do JSX), então o Next.js consome o pacote via `node_modules`
      normalmente, sem precisar de `transpilePackages` no `next.config.ts`.
+   - Declara um `"exports"` com dois entrypoints separados:
+     `"."` → `dist/index.js` (barrel, usado pelo **backend**) e
+     `"./page"` → `dist/<nome>-page.js` (componente React, usado pela **rota
+     Next.js**). Ver "Por que a página sai por um subpath".
 9. Garante a dependência `"<pacote-do-módulo>": "*"` em
    `apps/frontend/package.json` (idempotente).
 10. Se a visibilidade for `private` e
@@ -99,15 +105,18 @@ node .claude/skills/config-module-frontend/setup.js auth public
     reaproveitado por todas as rotas privadas futuras. Se já existir, não
     mexe nele.
 11. Cria, em `apps/frontend/src/app/(public|private)/<nome-do-modulo>/`:
-    `page.tsx` (importa e renderiza `<Nome>Page`), `layout.tsx`,
-    `loading.tsx`, `error.tsx` (Client Component, com botão de retry) e
-    `not-found.tsx`.
+    `page.tsx` (importa e renderiza `<Nome>Page` a partir do subpath
+    `<pacote>/page`, não do barrel raiz), `layout.tsx`, `loading.tsx`,
+    `error.tsx` (Client Component, com botão de retry) e `not-found.tsx`.
 12. Executa `npm install` na raiz do monorepo.
 13. Builda **apenas o módulo** (`npm run build --workspace=<pacote>`).
 14. Testa **apenas o módulo** (`npm run test --workspace=<pacote>`) —
     valida o componente de página.
-15. Builda o frontend (`npm run build --workspace=frontend`) para validar
-    que a rota nova compila. Diferente do backend, o `next build` não sofre
+15. Builda o frontend (`npm run build --workspace=<pacote-do-frontend>`) para
+    validar que a rota nova compila. O nome do workspace do frontend é lido do
+    `apps/frontend/package.json` (pode ter namespace, ex.:
+    `<namespace>/frontend`), não assumido como `frontend`.
+    Diferente do backend, o `next build` não sofre
     do bug de cache incremental do `tsc` (não usa `deleteOutDir` + cache
     incremental), então não é preciso limpar nada antes.
 16. Verificação final: confirma que os arquivos, o build (`dist/index.js` do
@@ -116,11 +125,35 @@ node .claude/skills/config-module-frontend/setup.js auth public
 ## Por que "main"/"types" apontam para dist, não para src
 
 Mesmo raciocínio da `config-module-backend`: uma vez que o Next.js
-efetivamente importa o pacote (`import { <Nome>Page } from '<pacote>'`), o
-`tsc` já compilou o `.tsx` para JS puro (com `jsx: "react-jsx"`) antes disso
+efetivamente importa o pacote (`import { <Nome>Page } from '<pacote>/page'`),
+o `tsc` já compilou o `.tsx` para JS puro (com `jsx: "react-jsx"`) antes disso
 acontecer (passo 13, sempre antes do build do frontend no passo 15) — então
 o Next.js resolve um `.js` comum via `node_modules`, sem precisar tratar o
 pacote como código-fonte não compilado.
+
+## Por que a página sai por um subpath (`<pacote>/page`), e não pelo barrel
+
+Um módulo pode ter **backend e frontend ao mesmo tempo** (rodando tanto a
+`config-module-backend` quanto esta skill). Se a página React fosse
+reexportada no barrel raiz (`src/index.ts`, o entrypoint `"."`), os dois lados
+colidiriam num único import:
+
+- o **backend** importa o barrel (`import { <Nome>Module } from '<pacote>'`) e
+  passaria a arrastar `react`/`react-dom`;
+- o **frontend**, ao importar o barrel, arrastaria o **módulo NestJS** e, com
+  ele, os peers **opcionais** `class-validator`/`class-transformer` do
+  `@nestjs/common` (referenciados via `require()` lazy dentro de
+  `ValidationPipe`/`ClassSerializerInterceptor`). O `next build` (Turbopack)
+  resolve esses `require()` estaticamente e **falha** com
+  `Module not found: Can't resolve 'class-transformer'`.
+
+Por isso o `package.json` do módulo declara dois entrypoints via `"exports"`:
+`"."` (barrel, só backend) e `"./page"` (só o componente React, em
+`dist/<nome>-page.js`). A rota Next.js importa **sempre** de `<pacote>/page`,
+que nunca puxa o NestJS — assim o `next build` não precisa de
+`class-validator`/`class-transformer`. Requer `moduleResolution: "bundler"`
+(ou `node16`/`nodenext`) no `tsconfig` do frontend para resolver o subpath —
+que é o padrão do `create-next-app`.
 
 ## Nota sobre o guard de `(private)/layout.tsx`
 

@@ -137,6 +137,36 @@ function createTurborepo() {
   flattenScaffoldIntoRoot();
 }
 
+function sleepSync(ms) {
+  const view = new Int32Array(new SharedArrayBuffer(4));
+  Atomics.wait(view, 0, 0, ms);
+}
+
+// No Windows, mover (rename) uma pasta recém-instalada pelo npm (ex.: "apps",
+// que contém node_modules) pode falhar com EPERM/EBUSY por um lock
+// transitório (antivírus/indexador de arquivos escaneando os arquivos
+// recém-criados). Tenta de novo algumas vezes antes de recorrer a
+// copiar-e-remover, mais lento mas resiliente a esse tipo de lock.
+function moveWithRetry(src, dest, attempts = 6, delayMs = 500) {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      fs.renameSync(src, dest);
+      return;
+    } catch (err) {
+      const retryable = err.code === 'EPERM' || err.code === 'EBUSY';
+      if (!retryable || attempt === attempts) {
+        if (retryable) {
+          fs.cpSync(src, dest, { recursive: true });
+          fs.rmSync(src, { recursive: true, force: true });
+          return;
+        }
+        throw err;
+      }
+      sleepSync(delayMs);
+    }
+  }
+}
+
 function flattenScaffoldIntoRoot() {
   for (const entry of fs.readdirSync(SCAFFOLD_TMP_DIR)) {
     const src = path.join(SCAFFOLD_TMP_DIR, entry);
@@ -144,7 +174,7 @@ function flattenScaffoldIntoRoot() {
     if (fs.existsSync(dest)) {
       throw new Error(`Não é possível mover "${entry}" para a raiz: já existe ${dest}.`);
     }
-    fs.renameSync(src, dest);
+    moveWithRetry(src, dest);
   }
   fs.rmSync(SCAFFOLD_TMP_DIR, { recursive: true, force: true });
 }

@@ -204,18 +204,21 @@ function removeGenericStub(moduleDir) {
   }
 }
 
-// Merge idempotente em src/index.ts (mesma lógica da config-module-backend):
-// outras skills complementares também adicionam exports no mesmo arquivo, em
-// qualquer ordem de execução, então nunca sobrescrevemos o arquivo inteiro.
-function upsertIndexExports(indexPath, exportLines) {
-  let content = fs.existsSync(indexPath) ? fs.readFileSync(indexPath, 'utf8') : '';
+// O barrel raiz (src/index.ts) é o entrypoint "." do pacote e é consumido pelo
+// BACKEND (a config-module-backend faz `import { <Nome>Module } from '<pacote>'`).
+// Por isso a página React NUNCA entra no barrel: se entrasse, o backend
+// arrastaria React e — pior — o frontend, ao importar o barrel, arrastaria o
+// módulo NestJS (e seus peers opcionais class-validator/class-transformer),
+// quebrando o `next build`. A página é exposta por um subpath dedicado
+// ("<pacote>/page" -> dist/<nome>-page.js), configurado no "exports" do
+// package.json (ver updateModulePackageJson). Aqui apenas garantimos que o
+// barrel fique livre do stub genérico e de qualquer reexport da página.
+function ensureBarrelWithoutPage(indexPath, moduleName) {
+  if (!fs.existsSync(indexPath)) return;
+  let content = fs.readFileSync(indexPath, 'utf8');
   content = content.replace(/export function ping\(\): string \{\n  return 'pong';\n\}\n?/, '');
-  for (const line of exportLines) {
-    if (!content.includes(line)) {
-      content = content.length && !content.endsWith('\n') ? `${content}\n` : content;
-      content += `${line}\n`;
-    }
-  }
+  const pageExport = new RegExp(`export \\* from '\\./${moduleName}-page';\\n?`);
+  content = content.replace(pageExport, '');
   fs.writeFileSync(indexPath, content);
 }
 
@@ -234,12 +237,30 @@ function updateModuleTsconfig(moduleDir) {
   writeJson(tsconfigPath, tsconfig);
 }
 
-function updateModulePackageJson(moduleDir) {
+function updateModulePackageJson(moduleDir, names) {
   const pkgPath = path.join(moduleDir, 'package.json');
   const pkg = readJson(pkgPath);
 
   pkg.main = 'dist/index.js';
   pkg.types = 'dist/index.d.ts';
+
+  // Dois entrypoints separados para não misturar backend (NestJS) e frontend
+  // (React) no mesmo import:
+  //   "."      -> barrel raiz (dist/index.js), usado pelo backend.
+  //   "./page" -> componente de página React (dist/<nome>-page.js), usado pela
+  //               rota Next.js. Importar "<pacote>/page" nunca puxa o módulo
+  //               NestJS, então o `next build` não precisa de class-validator/
+  //               class-transformer (peers opcionais do @nestjs/common).
+  pkg.exports = {
+    '.': {
+      types: './dist/index.d.ts',
+      default: './dist/index.js',
+    },
+    './page': {
+      types: `./dist/${names.moduleName}-page.d.ts`,
+      default: `./dist/${names.moduleName}-page.js`,
+    },
+  };
 
   pkg.dependencies = pkg.dependencies || {};
   for (const [dep, version] of Object.entries(REACT_DEPS)) {
@@ -310,11 +331,21 @@ function testModule(packageName) {
   run(`npm run test --workspace=${packageName}`, ROOT);
 }
 
+// O nome do workspace do frontend não é necessariamente "frontend": a
+// config-project-fullstack pode aplicar um namespace/escopo npm e renomear o
+// pacote para "<namespace>/frontend". Resolvemos o nome real a partir do
+// package.json do frontend para que "npm run build --workspace=<nome>" funcione
+// tanto com quanto sem namespace.
+function frontendWorkspaceName() {
+  const pkg = readJson(FRONTEND_PKG);
+  return pkg.name || 'frontend';
+}
+
 function buildFrontend() {
   // Ao contrário do backend, o "next build" não sofre do bug de cache
   // incremental do tsc (não usa deleteOutDir + tsc incremental), então não é
   // preciso limpar nenhum cache antes de buildar de novo.
-  run('npm run build --workspace=frontend', ROOT);
+  run(`npm run build --workspace=${frontendWorkspaceName()}`, ROOT);
 }
 
 // ---------------------------------------------------------------------------
@@ -397,10 +428,8 @@ function main() {
     removeGenericStub(moduleDir)
   );
 
-  step('Garantindo export da página em modules/<nome>/src/index.ts', () =>
-    upsertIndexExports(path.join(moduleDir, 'src', 'index.ts'), [
-      `export * from './${names.moduleName}-page';`,
-    ])
+  step('Mantendo a página fora do barrel raiz (exposta via subpath "<pacote>/page")', () =>
+    ensureBarrelWithoutPage(path.join(moduleDir, 'src', 'index.ts'), names.moduleName)
   );
 
   step('Atualizando jest.config.ts do módulo (testMatch inclui src/**/*.spec.tsx)', () =>
@@ -410,8 +439,8 @@ function main() {
   step('Habilitando JSX no tsconfig.json do módulo', () => updateModuleTsconfig(moduleDir));
 
   step(
-    'Atualizando package.json do módulo (React e Testing Library, main/types apontando para dist)',
-    () => updateModulePackageJson(moduleDir)
+    'Atualizando package.json do módulo (React/Testing Library, main/types e exports "." + "./page")',
+    () => updateModulePackageJson(moduleDir, names)
   );
 
   step('Garantindo dependência do módulo em apps/frontend/package.json', () =>

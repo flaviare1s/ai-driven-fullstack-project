@@ -95,11 +95,13 @@ node .claude/skills/config-module-backend/setup.js auth
 11. Builda **apenas o módulo** (`npm run build --workspace=<pacote>`).
 12. Testa **apenas o módulo** (`npm run test --workspace=<pacote>`) —
     valida controller e service.
-13. Builda o backend (`npm run build --workspace=backend`), limpando antes
-    o cache incremental do `tsc` do backend (veja a nota sobre o bug do
-    Nest abaixo).
-14. Testa o backend (`npm run test --workspace=backend`) para garantir que
-    o novo import não quebrou nada.
+13. Builda o backend (`npm run build --workspace=<pacote-do-backend>`),
+    limpando antes o cache incremental do `tsc` do backend (veja a nota sobre
+    o bug do Nest abaixo). O nome do workspace do backend é lido do
+    `apps/backend/package.json` (pode ter namespace, ex.:
+    `<namespace>/backend`), não assumido como `backend`.
+14. Testa o backend (`npm run test --workspace=<pacote-do-backend>`) para
+    garantir que o novo import não quebrou nada.
 15. Verificação final: confirma que os arquivos, o build (`dist/index.js` do
     módulo e `dist/main.js` do backend) e o registro no `AppModule` existem.
 
