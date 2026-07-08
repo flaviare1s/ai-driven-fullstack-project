@@ -77,7 +77,10 @@ node .claude/skills/config-new-module/setup.js auth @projeto-capsule
 6. Garante `"modules/*"` em `"workspaces"` do `package.json` raiz (mantendo
    as demais entradas, ex.: `apps/*`, `packages/*`).
 7. Executa `npm install` na raiz do monorepo.
-8. Executa `npm run build` na raiz do monorepo.
+8. Executa o build **apenas do módulo novo**
+   (`npm run build --workspace=<namespace>/<nome-do-modulo>`) — nunca
+   `npm run build`/`turbo run build` do projeto inteiro (veja "Por que o
+   build é escopado ao módulo" abaixo).
 9. Executa os testes do módulo criado
    (`npm run test --workspace=<namespace>/<nome-do-modulo>`).
 10. Verificação final: confirma que todos os arquivos, dependências e
@@ -94,6 +97,24 @@ node .claude/skills/config-new-module/setup.js auth @projeto-capsule
   `devDependencies`.
 - `npm install`, `npm run build` e os testes do módulo executados com
   sucesso.
+
+## Por que o build é escopado ao módulo
+
+A skill nunca roda `npm run build`/`turbo run build` do projeto inteiro
+depois de criar um módulo — ela builda só o workspace novo
+(`npm run build --workspace=<pacote>`). Isso é proposital: adicionar uma
+dependência de workspace nova em `apps/frontend`/`apps/backend` muda o hash
+de cache do turbo para esses apps (o `build` deles depende de `^build`), o
+que forçaria `nest build`/`next build` a rodar de novo mesmo sem nenhuma
+mudança de código. O `nest-cli.json` do backend usa `"deleteOutDir": true`
+junto com cache incremental do `tsc` (`tsconfig.tsbuildinfo`) — um rebuild
+"por nada" nessa combinação apaga `dist/` e o `tsc`, achando que nada mudou,
+não reemite os arquivos, deixando `dist/main.js` ausente e o backend
+quebrado (`Cannot find module '.../dist/main'` ao rodar `npm run dev`). Se
+isso já tiver acontecido antes desta correção, apague
+`apps/backend/tsconfig.tsbuildinfo` e `apps/backend/tsconfig.build.tsbuildinfo`
+e rode `npm run build --workspace=backend` uma vez para regenerar `dist/`
+corretamente.
 
 ## Nota sobre o editor (TS server)
 

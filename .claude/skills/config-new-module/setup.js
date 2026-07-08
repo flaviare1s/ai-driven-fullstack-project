@@ -226,8 +226,19 @@ function installDependencies() {
   run('npm install', ROOT);
 }
 
-function buildProject() {
-  run('npm run build', ROOT);
+function buildModule(packageName) {
+  // Importante: builda SOMENTE o workspace do módulo novo (não "npm run build"
+  // /"turbo run build" na raiz). Adicionar uma dependência de workspace nova
+  // em apps/frontend e apps/backend invalida o cache de build do turbo para
+  // esses apps (o hash de "^build" muda), forçando "nest build" a rodar de
+  // novo mesmo sem nenhuma mudança de código no backend. O nest-cli.json do
+  // backend usa "deleteOutDir": true; combinado com o cache incremental do
+  // tsc (tsconfig.tsbuildinfo), um rebuild "por nada" pode apagar dist/ e o
+  // tsc, achando que nada mudou, não reemite os arquivos — deixando
+  // dist/main.js ausente e o "npm run dev" do backend quebrado. Buildar só o
+  // módulo evita disparar esse bug em apps que não têm nenhuma relação com a
+  // mudança.
+  run(`npm run build --workspace=${packageName}`, ROOT);
 }
 
 function testModule(packageName) {
@@ -311,7 +322,9 @@ function main() {
 
   step('Instalando dependências do projeto (npm install)', installDependencies);
 
-  step('Executando build do projeto (npm run build)', buildProject);
+  step(`Executando build do módulo "${packageName}" (npm run build --workspace)`, () =>
+    buildModule(packageName)
+  );
 
   step(`Executando testes do módulo "${packageName}"`, () => testModule(packageName));
 
