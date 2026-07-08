@@ -29,7 +29,7 @@ const BACKEND_DIR = path.join(APPS_DIR, 'backend');
 const IGNORED_DIRS = new Set(['node_modules', '.git', '.turbo', '.next', 'dist']);
 
 let currentStep = 0;
-const TOTAL_STEPS = 12;
+const TOTAL_STEPS = 13;
 
 function log(msg) {
   console.log(msg);
@@ -190,6 +190,26 @@ function patchBackendPackageJson() {
   fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
 }
 
+function patchNestCliJson() {
+  // "nest new" gera nest-cli.json com "compilerOptions.deleteOutDir": true.
+  // Combinado com o cache incremental do tsc (tsconfig.json tem
+  // "incremental": true por padrão), um rebuild em que nada mudou no
+  // backend apaga "dist/" e o tsc, achando (pelo cache) que nada precisa
+  // ser reemitido, não recria os arquivos — deixando dist/main.js ausente
+  // e "npm run dev"/"nest start --watch" quebrados com "Cannot find module
+  // '.../dist/main'". Removemos deleteOutDir para que dist/ nunca seja
+  // apagada antes de uma recompilação incremental.
+  const nestCliPath = path.join(BACKEND_DIR, 'nest-cli.json');
+  const nestCli = JSON.parse(fs.readFileSync(nestCliPath, 'utf8'));
+  if (nestCli.compilerOptions) {
+    delete nestCli.compilerOptions.deleteOutDir;
+    if (Object.keys(nestCli.compilerOptions).length === 0) {
+      delete nestCli.compilerOptions;
+    }
+  }
+  fs.writeFileSync(nestCliPath, JSON.stringify(nestCli, null, 2) + '\n');
+}
+
 function createEnvFiles() {
   const frontendEnvExample = path.join(FRONTEND_DIR, '.env.example');
   const backendEnvExample = path.join(BACKEND_DIR, '.env.example');
@@ -343,6 +363,7 @@ function main() {
   step('Configurando ConfigModule em app.module.ts', patchAppModule);
   step('Configurando porta 4000 e CORS em main.ts', patchMain);
   step('Adicionando script "dev" ao package.json do backend', patchBackendPackageJson);
+  step('Removendo "deleteOutDir" de nest-cli.json (evita bug de cache incremental)', patchNestCliJson);
   step('Criando arquivos .env.example e .env', createEnvFiles);
   step('Removendo repositórios git aninhados indevidos', removeNestedGitDirs);
   step('Aplicando namespace informado (se houver)', () => applyNamespace(namespace));

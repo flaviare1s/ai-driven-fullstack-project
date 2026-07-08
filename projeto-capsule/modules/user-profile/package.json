@@ -2,8 +2,8 @@
   "name": "@projeto-capsule/user-profile",
   "version": "0.0.0",
   "private": true,
-  "main": "src/index.ts",
-  "types": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "test": "jest",
@@ -16,6 +16,14 @@
     "jest": "^30.0.0",
     "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
-    "typescript": "5.9.2"
+    "typescript": "5.9.2",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@testing-library/react": "^16.1.0",
+    "jest-environment-jsdom": "^30.0.0"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
   }
 }

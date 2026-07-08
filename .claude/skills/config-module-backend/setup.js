@@ -127,7 +127,6 @@ function ensureAssetsAvailable() {
     'service.ts',
     'controller.spec.ts',
     'service.spec.ts',
-    'index.ts',
     'jest.config.ts',
   ];
   for (const file of required) {
@@ -193,7 +192,27 @@ function generateNestArchitecture(moduleDir, names) {
     path.join(srcDir, `${names.moduleName}.service.spec.ts`),
     names
   );
-  writeTemplate('index.ts', path.join(srcDir, 'index.ts'), names);
+  upsertIndexExports(path.join(srcDir, 'index.ts'), [
+    `export * from './${names.moduleName}.module';`,
+    `export * from './${names.moduleName}.service';`,
+  ]);
+}
+
+// Faz um merge idempotente em src/index.ts em vez de sobrescrevê-lo por
+// inteiro: outras skills complementares (ex.: config-module-frontend) também
+// adicionam exports no mesmo arquivo, em qualquer ordem de execução. Também
+// remove o stub genérico "export function ping()" da config-new-module,
+// caso ainda esteja presente.
+function upsertIndexExports(indexPath, exportLines) {
+  let content = fs.existsSync(indexPath) ? fs.readFileSync(indexPath, 'utf8') : '';
+  content = content.replace(/export function ping\(\): string \{\n  return 'pong';\n\}\n?/, '');
+  for (const line of exportLines) {
+    if (!content.includes(line)) {
+      content = content.length && !content.endsWith('\n') ? `${content}\n` : content;
+      content += `${line}\n`;
+    }
+  }
+  fs.writeFileSync(indexPath, content);
 }
 
 function removeGenericStub(moduleDir) {

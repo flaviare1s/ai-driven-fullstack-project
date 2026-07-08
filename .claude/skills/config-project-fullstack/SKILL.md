@@ -65,19 +65,27 @@ escopo npm).
    (via `process.env.PORT ?? 4000`) e habilitar CORS.
 8. Adiciona o script `"dev": "nest start --watch"` ao
    `apps/backend/package.json` (sem remover os demais scripts existentes).
-9. Cria `apps/frontend/.env.example` (`NEXT_PUBLIC_API_URL=http://localhost:4000`)
-   e `apps/backend/.env.example` (`PORT=4000`), copiando cada um para o
-   respectivo `.env`.
-10. Varre o projeto criado em busca de pastas `.git` aninhadas inesperadas
+9. Remove `"deleteOutDir": true` de `apps/backend/nest-cli.json` (valor
+   padrão gerado pelo `nest new`). Combinado com o cache incremental do
+   `tsc` (`"incremental": true`, também padrão do `nest new`), um rebuild em
+   que nada mudou no backend apaga `dist/` e o `tsc`, achando pelo cache que
+   nada precisa ser reemitido, não recria os arquivos — deixando
+   `dist/main.js` ausente e `npm run dev`/`nest start --watch` quebrados
+   (`Cannot find module '.../dist/main'`). Sem `deleteOutDir`, a `dist/`
+   nunca é apagada antes de uma recompilação incremental.
+10. Cria `apps/frontend/.env.example` (`NEXT_PUBLIC_API_URL=http://localhost:4000`)
+    e `apps/backend/.env.example` (`PORT=4000`), copiando cada um para o
+    respectivo `.env`.
+11. Varre o projeto criado em busca de pastas `.git` aninhadas inesperadas
     (criadas por alguma ferramenta apesar das flags) e remove qualquer uma
     que seja encontrada.
-11. **Se um namespace foi informado**: localiza todos os `package.json` do
+12. **Se um namespace foi informado**: localiza todos os `package.json` do
     monorepo (ignorando `node_modules`), reescreve o campo `name` de cada um
     para usar o novo escopo (preservando o identificador do pacote) e
     atualiza as referências cruzadas em `dependencies`/`devDependencies`/
     `peerDependencies`/`optionalDependencies` para os novos nomes, mantendo o
     monorepo consistente.
-12. Verificação final: confirma que os `package.json`/`.env` esperados
+13. Verificação final: confirma que os `package.json`/`.env` esperados
     existem e que `main.ts` está configurado para a porta 4000 com CORS.
 
 ## Resultado esperado
