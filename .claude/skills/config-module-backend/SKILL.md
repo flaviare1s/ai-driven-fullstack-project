@@ -26,7 +26,8 @@ node .claude/skills/config-new-module/setup.js <nome-do-modulo> <namespace>
 ## Como executar
 
 Rode o script Node a partir da **raiz do monorepo Turborepo** (a mesma pasta
-onde se roda a `config-new-module`, ex.: dentro de `projeto-capsule/`):
+onde se roda a `config-new-module` — a própria raiz do repositório, já que a
+`config-project-fullstack` não cria subpasta):
 
 ```
 node <caminho-para-esta-skill>/setup.js <nome-do-modulo>
@@ -42,7 +43,7 @@ node .claude/skills/config-module-backend/setup.js auth
   módulo já existente (`modules/<nome-do-modulo>/package.json`).
 - Não é preciso informar o namespace de novo: a skill lê o campo `"name"` de
   `modules/<nome-do-modulo>/package.json` (criado pela `config-new-module`)
-  para descobrir o nome completo do pacote (ex.: `@projeto-capsule/auth`).
+  para descobrir o nome completo do pacote (ex.: `@minha-empresa/auth`).
 
 ## Regras para quem invoca esta skill
 

@@ -13,7 +13,7 @@
  * Pré-requisito: modules/<nome-do-modulo>/package.json já deve existir (rode
  * "config-new-module" antes, se ainda não existir).
  *
- * Uso (execute a partir da raiz do monorepo, ex: dentro de "projeto-capsule"):
+ * Uso (execute a partir da raiz do monorepo, ex: a própria raiz do repositório):
  *   node setup.js <nome-do-modulo> <public|private>
  */
 

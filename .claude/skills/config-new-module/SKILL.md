@@ -1,6 +1,6 @@
 ---
 name: config-new-module
-description: Cria um novo módulo de negócio dentro da pasta modules de um monorepo Turborepo (apps/frontend + apps/backend), copiando de forma determinística os arquivos de estrutura pré-definidos (jest.config.ts, tsconfig.json, tsconfig.build.json, package.json, index.ts, index.test.ts), ligando o módulo ao frontend e ao backend como dependência, e instalando/buildando/testando o projeto. Use quando o usuário pedir para criar/adicionar um novo módulo dentro de modules/. Exige um namespace/escopo npm (ex. "@projeto-capsule") — nunca execute sem ele.
+description: Cria um novo módulo de negócio dentro da pasta modules de um monorepo Turborepo (apps/frontend + apps/backend), copiando de forma determinística os arquivos de estrutura pré-definidos (jest.config.ts, tsconfig.json, tsconfig.build.json, package.json, index.ts, index.test.ts), ligando o módulo ao frontend e ao backend como dependência, e instalando/buildando/testando o projeto. Use quando o usuário pedir para criar/adicionar um novo módulo dentro de modules/. Exige um namespace/escopo npm (ex. "@minha-empresa") — nunca execute sem ele.
 ---
 
 # config-new-module
@@ -15,8 +15,9 @@ variações.
 ## Como executar
 
 Rode o script Node a partir da **raiz do monorepo Turborepo** (a pasta que
-contém `apps/`, `packages/` e o `package.json` raiz com `"workspaces"` — por
-exemplo, dentro de `projeto-capsule/`):
+contém `apps/`, `packages/` e o `package.json` raiz com `"workspaces"` —
+que é a própria raiz do repositório, já que a `config-project-fullstack`
+cria o projeto lá, sem subpasta):
 
 ```
 node <caminho-para-esta-skill>/setup.js <nome-do-modulo> <namespace>
@@ -25,12 +26,12 @@ node <caminho-para-esta-skill>/setup.js <nome-do-modulo> <namespace>
 Exemplo:
 
 ```
-node .claude/skills/config-new-module/setup.js auth @projeto-capsule
+node .claude/skills/config-new-module/setup.js auth @minha-empresa
 ```
 
 - `<nome-do-modulo>`: obrigatório, em kebab-case (ex.: `auth`, `user-profile`).
 - `<namespace>`: **obrigatório**. Escopo npm dos pacotes do monorepo (ex.:
-  `@projeto-capsule`); o `@` é opcional no argumento — a skill normaliza e
+  `@minha-empresa`); o `@` é opcional no argumento — a skill normaliza e
   valida o formato de escopo npm.
 
 ## Regras para quem invoca esta skill
@@ -41,9 +42,8 @@ node .claude/skills/config-new-module/setup.js auth @projeto-capsule
   comandos soltos, e não escreva os arquivos de `modules/<nome>` à mão.
 - Não copie/edite os templates de `assets/` "on the fly" para pular etapas, e
   não passe `--no-verify` nem pule as verificações do script.
-- Rode o comando a partir da raiz do monorepo Turborepo (não da raiz do
-  repositório git externo, se houver um monorepo aninhado como
-  `projeto-capsule/`).
+- Rode o comando a partir da raiz do monorepo Turborepo — que é a própria
+  raiz do repositório git (a `config-project-fullstack` não cria subpasta).
 - Se o script falhar em qualquer etapa, pare e reporte o erro exato ao
   usuário — não tente contornar manualmente (ex.: não edite `node_modules`,
   não pule o build/testes por conta própria).
