@@ -1,0 +1,8 @@
+{
+  "extends": "__TSCONFIG_PKG__/base.json",
+  "compilerOptions": {
+    "types": ["jest", "node"]
+  },
+  "include": ["src", "test"],
+  "exclude": ["node_modules", "dist"]
+}
