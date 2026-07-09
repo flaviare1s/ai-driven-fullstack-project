@@ -13,7 +13,8 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "@ai-driven-fullstack-project/auth": "*",
-    "@ai-driven-fullstack-project/user-profile": "*"
+    "@ai-driven-fullstack-project/user-profile": "*",
+    "@ai-driven-fullstack-project/shared": "*"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

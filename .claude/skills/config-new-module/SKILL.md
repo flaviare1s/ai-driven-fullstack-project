@@ -72,18 +72,25 @@ node .claude/skills/config-new-module/setup.js auth @minha-empresa
      nunca tenta compilar os arquivos de teste.
 4. Adiciona `"<namespace>/<nome-do-modulo>": "*"` em `dependencies` de
    `apps/frontend/package.json` e `apps/backend/package.json`.
-5. Garante `"ts-node": "^10.9.2"` em `devDependencies` do `package.json`
+5. Adiciona a dependência do pacote de infraestrutura `shared`
+   (`"<namespace>/shared": "*"`) ao `package.json` do módulo **se
+   `packages/shared` já existir** (criado pela skill `config-shared-package`).
+   Se o `shared` ainda não existir, o módulo é criado sem essa dependência
+   (adicionar uma dependência de workspace inexistente quebraria o
+   `npm install`) — assim "todos os módulos de negócio dependem do shared" vale
+   inclusive para os módulos criados depois do `shared`.
+6. Garante `"ts-node": "^10.9.2"` em `devDependencies` do `package.json`
    raiz (sem sobrescrever uma versão já presente).
-6. Garante `"modules/*"` em `"workspaces"` do `package.json` raiz (mantendo
+7. Garante `"modules/*"` em `"workspaces"` do `package.json` raiz (mantendo
    as demais entradas, ex.: `apps/*`, `packages/*`).
-7. Executa `npm install` na raiz do monorepo.
-8. Executa o build **apenas do módulo novo**
+8. Executa `npm install` na raiz do monorepo.
+9. Executa o build **apenas do módulo novo**
    (`npm run build --workspace=<namespace>/<nome-do-modulo>`) — nunca
    `npm run build`/`turbo run build` do projeto inteiro (veja "Por que o
    build é escopado ao módulo" abaixo).
-9. Executa os testes do módulo criado
-   (`npm run test --workspace=<namespace>/<nome-do-modulo>`).
-10. Verificação final: confirma que todos os arquivos, dependências e
+10. Executa os testes do módulo criado
+    (`npm run test --workspace=<namespace>/<nome-do-modulo>`).
+11. Verificação final: confirma que todos os arquivos, dependências e
     entradas de configuração esperados existem.
 
 ## Resultado esperado

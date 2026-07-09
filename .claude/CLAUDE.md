@@ -7,12 +7,13 @@
 
 # Orquestração das skills de configuração de projeto
 
-Este repositório tem 4 skills complementares em `.claude/skills/` para montar um monorepo
-fullstack (Turborepo + Next.js + NestJS) e seus módulos de negócio, de forma determinística.
+Este repositório tem 5 skills complementares em `.claude/skills/` para montar um monorepo
+fullstack (Turborepo + Next.js + NestJS), seus módulos de negócio e seu pacote de
+infraestrutura compartilhado, de forma determinística.
 Quando o usuário pedir para **configurar/criar um projeto**, citando ou não nomes de módulos,
 siga esta orquestração em vez de rodar os comandos manualmente ou inventar uma sequência própria.
 
-## As 4 skills, em ordem de dependência
+## As 5 skills, em ordem de dependência
 
 1. **`config-project-fullstack`** — cria o monorepo do zero (Turborepo + Next.js na porta 3000 +
    NestJS na porta 4000) **diretamente na raiz do repositório atual** (sem subpasta). Só precisa
@@ -22,18 +23,28 @@ siga esta orquestração em vez de rodar os comandos manualmente ou inventar uma
    ```
    node .claude/skills/config-project-fullstack/setup.js [namespace]
    ```
-2. **`config-new-module`** — cria o pacote compartilhado de um módulo de negócio em
+2. **`config-shared-package`** — cria o pacote de **infraestrutura** `shared` em
+   `packages/shared` (TypeScript framework-agnostic: tipos/utilitários/constantes puros, sem
+   React nem NestJS) e o liga como dependência de `apps/frontend`, `apps/backend` e de **todos**
+   os módulos de negócio em `modules/*`. A criação builda **apenas** o próprio `shared`, sem
+   impactar (rebuild) frontend/backend. Roda **uma vez** por repositório, depois da
+   `config-project-fullstack`. O namespace é detectado automaticamente (ou pode ser informado).
+   ```
+   node .claude/skills/config-shared-package/setup.js [namespace]
+   ```
+3. **`config-new-module`** — cria o pacote compartilhado de um módulo de negócio em
    `modules/<nome-do-modulo>` (package.json, tsconfig, jest, stub inicial). **Pré-requisito** das
-   duas skills seguintes.
+   duas skills seguintes. Se `packages/shared` já existir, o módulo já nasce dependendo do
+   `shared` automaticamente.
    ```
    node .claude/skills/config-new-module/setup.js <nome-do-modulo> <namespace>
    ```
-3. **`config-module-backend`** — adiciona arquitetura NestJS (Module/Controller/Service + specs)
+4. **`config-module-backend`** — adiciona arquitetura NestJS (Module/Controller/Service + specs)
    ao módulo e registra no `AppModule` do backend. Só roda depois da `config-new-module`.
    ```
    node .claude/skills/config-module-backend/setup.js <nome-do-modulo>
    ```
-4. **`config-module-frontend`** — adiciona uma rota Next.js (App Router) pública ou privada para
+5. **`config-module-frontend`** — adiciona uma rota Next.js (App Router) pública ou privada para
    o módulo. Só roda depois da `config-new-module`.
    ```
    node .claude/skills/config-module-frontend/setup.js <nome-do-modulo> <public|private>
@@ -53,15 +64,19 @@ notificações"*:
    prosseguir — não assuma silenciosamente.
 2. **Projeto base**: se a raiz ainda não tem o monorepo, rode `config-project-fullstack` com o
    namespace confirmado.
-3. **Para cada módulo citado pelo usuário**:
+3. **Pacote `shared`**: se o projeto vai ter um pacote de infraestrutura compartilhado (ou o
+   usuário pedir), rode `config-shared-package` **uma vez**, antes de criar os módulos — assim
+   cada módulo criado depois já nasce dependendo do `shared`. (Rodar depois também funciona: a
+   skill liga os módulos que já existirem.)
+4. **Para cada módulo citado pelo usuário**:
    a. Rode `config-new-module <nome-do-modulo> <namespace>`.
    b. Pergunte ao usuário (não assuma) se aquele módulo precisa de **backend**, **frontend**, ou
       **os dois** — só rode `config-module-backend`/`config-module-frontend` para o que for
       confirmado.
    c. Se o módulo tiver frontend, pergunte também se a rota é **pública** ou **privada** antes de
       rodar `config-module-frontend`.
-4. Ao final, rode `npm install`, `npm run build` e (se aplicável) os testes dos módulos criados
+5. Ao final, rode `npm install`, `npm run build` e (se aplicável) os testes dos módulos criados
    para validar que tudo compila e passa antes de reportar sucesso.
 
-Nunca pule as perguntas de esclarecimento do passo 3 assumindo um padrão — cada módulo pode ter
+Nunca pule as perguntas de esclarecimento do passo 4 assumindo um padrão — cada módulo pode ter
 necessidades diferentes (só backend, só frontend, ou os dois; público ou privado).

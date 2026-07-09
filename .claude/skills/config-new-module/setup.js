@@ -31,7 +31,7 @@ const BACKEND_PKG = path.join(APPS_DIR, 'backend', 'package.json');
 const ROOT_PKG = path.join(ROOT, 'package.json');
 
 let currentStep = 0;
-const TOTAL_STEPS = 10;
+const TOTAL_STEPS = 11;
 
 function log(msg) {
   console.log(msg);
@@ -190,6 +190,30 @@ function addDependencyToApp(appPkgPath, packageName) {
   writeJson(appPkgPath, pkg);
 }
 
+// Todo módulo de negócio depende do pacote de infraestrutura "shared"
+// (packages/shared), criado pela skill config-shared-package. Só adicionamos a
+// dependência SE o shared já existir — caso contrário adicionar uma dependência
+// de workspace inexistente quebraria o "npm install". Assim, "todos os módulos
+// dependem do shared" também vale para os módulos criados depois do shared.
+function addSharedDependencyIfPresent(moduleDir) {
+  const sharedPkgPath = path.join(ROOT, 'packages', 'shared', 'package.json');
+  if (!fs.existsSync(sharedPkgPath)) {
+    log('    packages/shared não existe ainda; módulo criado sem dependência de "shared".');
+    return;
+  }
+  const sharedName = readJson(sharedPkgPath).name;
+  const pkgPath = path.join(moduleDir, 'package.json');
+  const pkg = readJson(pkgPath);
+  pkg.dependencies = pkg.dependencies || {};
+  if (pkg.dependencies[sharedName]) {
+    log(`    "${sharedName}" já presente nas dependências do módulo.`);
+    return;
+  }
+  pkg.dependencies[sharedName] = '*';
+  writeJson(pkgPath, pkg);
+  log(`    Dependência "${sharedName}" adicionada ao módulo.`);
+}
+
 function ensureTsNodeInRoot() {
   const pkg = readJson(ROOT_PKG);
   pkg.devDependencies = pkg.devDependencies || {};
@@ -316,6 +340,10 @@ function main() {
     addDependencyToApp(FRONTEND_PKG, packageName);
     addDependencyToApp(BACKEND_PKG, packageName);
   });
+
+  step('Adicionando dependência do pacote "shared" ao módulo (se packages/shared existir)', () =>
+    addSharedDependencyIfPresent(moduleDir)
+  );
 
   step('Garantindo "ts-node" no package.json raiz', ensureTsNodeInRoot);
 

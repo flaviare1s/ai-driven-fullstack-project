@@ -29,7 +29,8 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "@ai-driven-fullstack-project/shared": "*"
   },
   "exports": {
     ".": {

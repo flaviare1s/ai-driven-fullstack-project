@@ -1,0 +1,21 @@
+{
+  "name": "__PACKAGE_NAME__",
+  "version": "0.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "jest",
+    "check-types": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "__TSCONFIG_PKG__": "*",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^22.15.3",
+    "jest": "^30.0.0",
+    "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2",
+    "typescript": "5.9.2"
+  }
+}
